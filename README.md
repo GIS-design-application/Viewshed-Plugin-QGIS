@@ -166,6 +166,8 @@ pip install ptvsd
 
 ### Processing Plugins
 
+![interface](./img/interface.png)
+
 在`viewshed_analysis_algorithm.py` 中的 `processAlgorithm` 函数导入算法
 
 按照 [algorithm_sample.py](./algorithm_sample.py) 中的接口配置算法
