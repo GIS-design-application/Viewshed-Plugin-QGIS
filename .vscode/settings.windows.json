@@ -1,0 +1,4 @@
+// settings.json
+{
+  "python.defaultInterpreterPath": "C:\\Program Files\\REPLACE_YOUR_QGIS_FOLDER_NAME\\bin\\python-qgis-ltr.bat"
+}

@@ -1,0 +1,4 @@
+// settings.json
+{
+  "python.defaultInterpreterPath": "/Applications/QGIS.app/Contents/MacOS/bin"
+}
