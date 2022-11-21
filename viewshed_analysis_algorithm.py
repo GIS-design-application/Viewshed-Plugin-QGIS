@@ -36,7 +36,7 @@ from qgis.core import (QgsFeatureSink, QgsProcessing, QgsProcessingAlgorithm,
                        QgsProcessingParameterField,
                        QgsProcessingParameterRasterDestination,
                        QgsProcessingParameterRasterLayer,
-                       QgsRasterLayer)
+                       QgsRasterLayer, QgsProject)
 from qgis.PyQt.QtCore import QCoreApplication
 
 from .utils import get_band_data, get_raster_config, save_raster
@@ -185,9 +185,14 @@ class ViewshedAnalysisAlgorithm(QgsProcessingAlgorithm):
                 feedback.reportError(self.tr('Failed to save raster!\n'+str(e)))
             return {}
         # generate the output layer
-        dest = QgsRasterLayer(dest_url, 'viewshed')
-        # Return the results of the algorithm. 
-        return {self.OUTPUT:dest}
+        output_layer = QgsRasterLayer(dest_url, 'viewshed')
+        # show error message if the output layer is not valid
+        if not output_layer.isValid():
+            feedback.reportError(self.tr('Invalid output layer!'))
+            return {}
+        # add the output layer to the project
+        QgsProject.instance().addMapLayer(output_layer)
+        return {self.OUTPUT: dest_url}
 
     def name(self):
         """
