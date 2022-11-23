@@ -41,7 +41,7 @@ class BaseAlgorithm():
         return floor((self.ymax - y) / self.yunit), floor((x - self.xmin) / self.xunit)
 
     def crossing_points(self, startf, endi, crossing=Crossing.X_ONLY) -> np.ndarray:
-        # 根据选择的交叉类型对所有数据进行差值
+        # 根据选择的交叉类型对所有数据进行插值
         starti = self.f2i(*startf)
         if crossing == Crossing.X_ONLY:
             i = np.arange(starti[0], endi[0] + 1)
@@ -61,7 +61,7 @@ class BaseAlgorithm():
         end_ele: float,
         crossing=Crossing.X_ONLY
     ) -> np.ndarray:
-        # 求 LOS 线在每个整点处的差值高程
+        # 求 LOS 线在每个整点处的插值高程
         if crossing == Crossing.X_ONLY:
             locs = [i[0], i[-1]]
             indice = i
@@ -76,7 +76,7 @@ class BaseAlgorithm():
         return f(indice)
 
     def interpolate_elev(self, i, j):
-        # 求 LOS 线在每个整点处的 DEM 高程差值
+        # 求 LOS 线在每个整点处的 DEM 高程插值
         return self.interp_dem(np.dstack((i, j)))[0]
 
 
@@ -98,11 +98,11 @@ if __name__ == "__main__":
     # 真正的算法应当考虑将下面逻辑向量化，即：
     # 1. 初始化**一系列**边界点，如 R2 算法初始化所有边界点
     # 2. 将下面逻辑抽象成为一个 np.vectorize 的函数，将所有边界点输入
-    # 3. 批量拿到所有交点的 LOS 值和实际 DEM 差值
+    # 3. 批量拿到所有交点的 LOS 值和实际 DEM 插值
     # 4. 对于内部的点，找最近的（LOS, DEM）数值对并判断之
 
     # 初始化算法
-    # 此处会定义算法运算范围、定义差值函数等，只需运行一次
+    # 此处会定义算法运算范围、定义插值函数等，只需运行一次
     alg = BaseAlgorithm(geoTransform, band_data)
 
     # 假设视点及视点处观察者高度：
@@ -128,25 +128,25 @@ if __name__ == "__main__":
 
     # 首先求视点和边界点连线与各个像元的交点
     # crossing 表示交点出现在 x 轴上还是 y 轴上
-    # 返回一串点集的索引坐标差值，保证 i j 范围永远在矩阵的索引之内。
+    # 返回一串点集的索引坐标插值，保证 i j 范围永远在矩阵的索引之内。
     i, j = alg.crossing_points(start, endi, cross)
     # 统计交点数目
     shp = np.dstack((i, j))[0].shape
     print('共有 {} 个交点'.format(shp[0]))
 
-    # 求视点和边界点连线上的所有交点的高程差值
+    # 求视点和边界点连线上的所有交点的高程插值
     interpolated_elev = alg.interpolate_elev(i, j)
     assert alg.dem[int(i[0]), int(j[0])] == interpolated_elev[0] and alg.dem[int(
         i[-1]), int(j[-1])] == interpolated_elev[-1]
 
-    # 求视点和边界点 LOS 上所有交点的高程差值
+    # 求视点和边界点 LOS 上所有交点的高程插值
     # 应该是三角形的斜边那条线
     interpolated_los = alg.interpolate_los(
         i, j, start_elev, alg.dem[endi[0], endi[1]], cross)
     assert start_elev == interpolated_los[0]
     assert alg.dem[endi[0], endi[1]] == interpolated_los[-1]
 
-    # 两者差值交点个数是否一致
+    # 两者插值交点个数是否一致
     assert interpolated_elev.shape == interpolated_los.shape
 
     visible = np.all(interpolated_los >= interpolated_elev)
