@@ -44,11 +44,11 @@ class BaseAlgorithm():
         # 根据选择的交叉类型对所有数据进行插值
         starti = self.f2i(*startf)
         if crossing == Crossing.X_ONLY:
-            i = np.arange(starti[0], endi[0] + 1)
+            i = np.linspace(starti[0], endi[0], abs(endi[0] - starti[0]) + 1)
             f = interp1d([starti[0], endi[0]], [starti[1], endi[1]])
             j = f(i)
         else:
-            j = np.arange(starti[1], endi[1] + 1)
+            j = np.linspace(starti[1], endi[1], abs(endi[1] - starti[1]) + 1)
             f = interp1d([starti[1], endi[1]], [starti[0], endi[0]])
             i = f(j)
         return i, j  # 获得每个交点坐标
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     # 注意边界点坐标是矩阵的索引，因为是迭代边界拿到的。
     # 此处测试用 DEM 矩阵尺寸 500 x 500，边界点选择 （100，499）
     # 实际当中应该生成 8 个边界点序列，然后一次性输入
-    endi = (100, 499)
+    endi = (499, 0)
 
     # 这里还有一个可视性 == True 的样例替换上方数据
     # tips: alg.f2i 函数可以将经纬度和 DEM 矩阵索引进行转换
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     # 设定相交于横轴还是纵轴
     # 或许 8 个区域应该交叉用 X_ONLY 和 Y_ONLY 确保精度？
     # 即：12点钟方向和 3 点钟方向之间，前半部分用 X_ONLY, 后半部分用 Y_ONLY
-    cross = Crossing.X_ONLY
+    cross = Crossing.Y_ONLY
 
     # 首先求视点和边界点连线与各个像元的交点
     # crossing 表示交点出现在 x 轴上还是 y 轴上
