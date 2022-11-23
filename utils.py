@@ -53,5 +53,6 @@ def get_raster_config(dem):
 	ymax = extent.yMaximum()
 	xres = dem.rasterUnitsPerPixelX()
 	yres = dem.rasterUnitsPerPixelY()
+	# https://gdal.org/tutorials/geotransforms_tut.html
 	geotransform = (xmin, xres, 0, ymax, 0, -yres)
 	return {'geotransform': geotransform, 'projection': projection}
