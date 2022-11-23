@@ -27,10 +27,10 @@ class BaseAlgorithm():
         self.xunit = transform[1]
         self.yunit = -transform[5]
 
-        self.dem = dem  # 注意 [0, 0] 位置对应的经纬度应该是 (ymax, xmin)
-        y = np.arange(dem.shape[1])
+        self.dem = dem  # 注意 [0, 0] 位置对应的经纬度应该是 (ymax, xmin)，换言之
         x = np.arange(dem.shape[0])
-        self.interp_dem = Interpolator((y, x), dem)
+        y = np.arange(dem.shape[1])
+        self.interp_dem = Interpolator((x, y), dem)
 
     def i2f(self, i: int, j: int):
         # 给定栅格索引，返回栅格单元的中心点的经纬度
