@@ -6,8 +6,8 @@ from math import floor
 
 
 class Crossing(IntEnum):
-    X_ONLY = 1
-    Y_ONLY = 2
+    Y_ONLY = 1
+    X_ONLY = 2
 
 
 class BaseAlgorithm():
