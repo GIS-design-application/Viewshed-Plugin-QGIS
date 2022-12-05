@@ -42,6 +42,8 @@ class BaseAlgorithm():
     def crossing_points(self, startf, endi, crossing=Crossing.X_ONLY) -> np.ndarray:
         # 根据选择的交叉类型对所有数据进行插值
         starti = self.f2i(*startf)
+        if starti == endi:
+            return np.array([starti[0]]), np.array([starti[1]])
         if crossing == Crossing.X_ONLY:
             i = np.linspace(starti[0], endi[0], abs(endi[0] - starti[0]) + 1)
             f = interp1d([starti[0], endi[0]], [starti[1], endi[1]])
