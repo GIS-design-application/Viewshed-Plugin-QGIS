@@ -9,12 +9,11 @@ class Crossing(IntEnum):
     Y_ONLY = 1
     X_ONLY = 2
 
-
 class BaseAlgorithm():
     """原则：
     1. 算法中所有点的坐标都采用 DEM 矩阵坐标
     2. DEM 矩阵的 [0, 0] 对应最左上角像元的中点，即 ( ymax - yunit / 2, xmin + xunit / 2 )
-                                              (      i          ,        j         )
+                                                (      i          ,        j         )
     3. 可以使用 i2f 和 f2i 相互转换，注意 f2i 只能给出点所在的具体索引。
     """
 
@@ -93,7 +92,7 @@ if __name__ == "__main__":
     # draw band_data
     import matplotlib.pyplot as plt
     plt.imshow(band_data[:500, :500])
-
+    plt.show()
     # 以下代码演示对于一个视点、一个边界点如何判断是否可视
     # 真正的算法应当考虑将下面逻辑向量化，即：
     # 1. 初始化**一系列**边界点，如 R2 算法初始化所有边界点
@@ -124,6 +123,40 @@ if __name__ == "__main__":
     # 设定相交于横轴还是纵轴
     # 或许 8 个区域应该交叉用 X_ONLY 和 Y_ONLY 确保精度？
     # 即：12点钟方向和 3 点钟方向之间，前半部分用 X_ONLY, 后半部分用 Y_ONLY
+    cross = Crossing.Y_ONLY
+
+    # 首先求视点和边界点连线与各个像元的交点
+    # crossing 表示交点出现在 x 轴上还是 y 轴上
+    # 返回一串点集的索引坐标插值，保证 i j 范围永远在矩阵的索引之内。
+    i, j = alg.crossing_points(start, endi, cross)
+    # 统计交点数目
+    shp = np.dstack((i, j))[0].shape
+    print('共有 {} 个交点'.format(shp[0]))
+
+    # 求视点和边界点连线上的所有交点的高程插值
+    interpolated_elev = alg.interpolate_elev(i, j)
+    assert alg.dem[int(i[0]), int(j[0])] == interpolated_elev[0] and alg.dem[int(
+        i[-1]), int(j[-1])] == interpolated_elev[-1]
+
+    # 求视点和边界点 LOS 上所有交点的高程插值
+    # 应该是三角形的斜边那条线
+    interpolated_los = alg.interpolate_los(
+        i, j, start_elev, alg.dem[endi[0], endi[1]], cross)
+    assert start_elev == interpolated_los[0]
+    assert alg.dem[endi[0], endi[1]] == interpolated_los[-1]
+
+    # 两者插值交点个数是否一致
+    assert interpolated_elev.shape == interpolated_los.shape
+
+    visible = np.all(interpolated_los >= interpolated_elev)
+
+    print("可见性：", visible)
+
+def ViewshedForPair(dem, startf, endf, crossing):
+    alg = BaseAlgorithm(geoTransform, band_data)
+    
+    start, start_elev = (36, 76.3), 5000
+    endi = (100, 499)
     cross = Crossing.Y_ONLY
 
     # 首先求视点和边界点连线与各个像元的交点
