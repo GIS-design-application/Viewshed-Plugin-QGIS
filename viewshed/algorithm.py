@@ -52,6 +52,7 @@ class BaseAlgorithm():
             j = np.linspace(starti[1], endi[1], abs(endi[1] - starti[1]) + 1)
             f = interp1d([starti[1], endi[1]], [starti[0], endi[0]])
             i = f(j)
+        i[0],j[0],i[-1],j[-1] = starti[0],starti[1],endi[0],endi[1] # keep the start and end point unchanged
         return i, j  # 获得每个交点坐标
 
     def interpolate_los(
