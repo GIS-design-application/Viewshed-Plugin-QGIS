@@ -81,11 +81,10 @@ class BaseAlgorithm():
         # 求 LOS 线在每个整点处的 DEM 高程插值
         return self.interp_dem(np.dstack((i, j)))[0]
 
-def R3Algorithm(dem_path, startf, start_height=0, solution = "slope"):
+def R3Algorithm(dem_path, startf, observer_height=0, solution = "slope"):
     # dem_path: file path of dem file
     # startf: the coordinate of start point
-    # start_elev: the elevation of start point
-    # start_height: the height of observer higher than the elevation of start point
+    # observer_height: the height of observer higher than the elevation of start point
     # solution: "slope" or "viewshed"
     ds = gdal.Open(dem_path)
     band_data = ds.GetRasterBand(1).ReadAsArray()
@@ -121,16 +120,16 @@ def R3Algorithm(dem_path, startf, start_height=0, solution = "slope"):
         for x in range(band_data.shape[1]):
             #print(y,x)
             if abs(starti[0] - y) < abs(starti[1] - x):
-                ViewshedForPair(alg, startf, (y,x), Crossing.Y_ONLY, start_elev=start_height+alg.dem[starti[0],starti[1]], res=viewshed_res, solution=solution)
+                ViewshedForPair(alg, startf, (y,x), Crossing.Y_ONLY, start_elev=observer_height+alg.dem[starti[0],starti[1]], res=viewshed_res, solution=solution)
             else:
-                ViewshedForPair(alg, startf, (y,x), Crossing.X_ONLY, start_elev=start_height+alg.dem[starti[0],starti[1]], res=viewshed_res, solution=solution)
+                ViewshedForPair(alg, startf, (y,x), Crossing.X_ONLY, start_elev=observer_height+alg.dem[starti[0],starti[1]], res=viewshed_res, solution=solution)
     #print(viewshed_res)
     return viewshed_res
     
 def ViewshedForPair(alg, startf: tuple, endi, crossing, start_elev=0, res=None, solution = "height"):
     # Atomic calculation in R3 Algorithm
-    # startf: start point in float
-    # endi: end point in int
+    # startf: the coordinate of start point
+    # endi: gridded coordinate of end point
     # crossing: the axis that the line cross
     # start_elev: height of observer + elevation 
     # res: the result map
@@ -169,6 +168,113 @@ def ViewshedForPair(alg, startf: tuple, endi, crossing, start_elev=0, res=None, 
     if res is not None:
         res[endi[0]][endi[1]] = visible
     return visible
+
+
+def R2Algorithm(dem_path, startf, observer_height=0):
+    # dem_path: file path of dem file
+    # startf: the coordinate of start point
+    # observer_height: the height of observer higher than the elevation of start point
+    ds = gdal.Open(dem_path)
+    band_data = ds.GetRasterBand(1).ReadAsArray()
+    geoTransform = ds.GetGeoTransform()
+
+    # draw band_data
+    plt.imshow(band_data[:500, :500])
+    plt.show()
+    
+    print(band_data.shape)
+    
+    alg = BaseAlgorithm(geoTransform, band_data)
+    
+    viewshed_res = np.full_like(band_data,1, int)
+    distance_map = np.full_like(band_data, 10000, float)
+    
+    starti = alg.f2i(*startf)
+    distance_map[starti[0],starti[1]] = 0
+    viewshed_res[starti[0],starti[1]] = True
+    
+    # recognising edge pixels
+    x_crossing = []
+    y_crossing = []
+    for x in [0, band_data.shape[1]-1]:
+        for y in range(band_data.shape[0]):
+            if abs(starti[0] - y) > abs(starti[1] - x):
+                x_crossing.append((y,x))
+            else:
+                y_crossing.append((y,x))
+
+    for y in [0, band_data.shape[0]-1]:
+        for x in range(1, band_data.shape[1]-1):
+            if abs(starti[0] - y) > abs(starti[1] - x):
+                x_crossing.append((y,x))
+            else:
+                y_crossing.append((y,x))
+
+    for endi in x_crossing:
+        VieshedForPairWithAngle(alg, startf, endi, Crossing.X_ONLY, 
+                                start_elev=observer_height+alg.dem[starti[0],starti[1]], 
+                                res=viewshed_res, 
+                                dist_map=distance_map, 
+                                ang_map=angle_map)
+    for endi in y_crossing:
+        VieshedForPairWithAngle(alg, startf, endi, Crossing.Y_ONLY, 
+                                start_elev=observer_height+alg.dem[starti[0],starti[1]], 
+                                res=viewshed_res, 
+                                dist_map=distance_map, 
+                                ang_map=angle_map)
+    print(distance_map)
+    return viewshed_res
+
+def VieshedForPairWithAngle(alg, startf: tuple, endi, crossing, start_elev=0, res=None, dist_map=None):
+    # Atomic calculation in R2 Algorithm
+    # startf: the coordinate of start point
+    # endi: gridded coordinate of end point
+    # crossing: the axis that the line cross
+    # start_elev: height of observer + elevation 
+    # res: the result map
+    # dist_map: the distance map. The value is the distance from the point, which is used to approximate the vieshed of this grid, to this grid.
+    i, j = alg.crossing_points(startf, endi, crossing)
+    starti = alg.f2i(*startf)
+    
+    if starti == endi:
+        return
+
+    # 求视点和边界点连线上的所有交点的高程插值
+    interpolated_elev = alg.interpolate_elev(i, j)
+    # 求视点和边界点 LOS 上所有交点的高程插值
+    interpolated_los = alg.interpolate_los(
+        i, j, start_elev, alg.dem[endi[0], endi[1]], crossing)
+    assert start_elev == interpolated_los[0]
+    assert alg.dem[endi[0], endi[1]] == interpolated_los[-1]
+    assert interpolated_elev.shape == interpolated_los.shape # 两者插值交点个数是否一致
+    
+    # 去除起点
+    i = i[1:]
+    j = j[1:]
+    interpolated_elev = interpolated_elev[1:]
+    interpolated_los = interpolated_los[1:]
+    #angs = np.arctan((interpolated_elev - start_elev) / np.sqrt((i - starti[0])**2 + (j - starti[1])**2))
+    angs = (interpolated_elev - start_elev) / np.sqrt((i - starti[0])**2 + (j - starti[1])**2)
+    for k in range(len(angs)):
+        if crossing == Crossing.X_ONLY:
+            left = floor(j[k])
+            right = left +1 if left != j[k] else left
+            #print(left, right, j[k])
+            if j[k]-left < dist_map[int(i[k]), left]:
+                dist_map[int(i[k]), left] = j[k]-left
+                res[int(i[k]),left] = (angs[:k+1].max() == angs[k])
+            if right-j[k] < dist_map[int(i[k]), right]:
+                dist_map[int(i[k]), right] = right-j[k]
+                res[int(i[k]),right] = (angs[:k+1].max() == angs[k])
+        if crossing == Crossing.Y_ONLY:
+            left = floor(i[k])
+            right = left+1 if left != i[k] else left
+            if i[k]-left < dist_map[left, int(j[k])]:
+                dist_map[left, int(j[k])] = i[k]-left
+                res[left, int(j[k])] = (angs[:k+1].max() == angs[k])
+            if right-i[k] < dist_map[right, int(j[k])]:
+                dist_map[right, int(j[k])] = right-i[k]
+                res[right, int(j[k])] = (angs[:k+1].max() == angs[k])
 
 
 if __name__ == "__main__":
