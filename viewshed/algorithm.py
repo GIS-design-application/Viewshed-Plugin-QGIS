@@ -81,6 +81,95 @@ class BaseAlgorithm():
         # 求 LOS 线在每个整点处的 DEM 高程插值
         return self.interp_dem(np.dstack((i, j)))[0]
 
+def R3Algorithm(dem_path, startf, start_height=0, solution = "slope"):
+    # dem_path: file path of dem file
+    # startf: the coordinate of start point
+    # start_elev: the elevation of start point
+    # start_height: the height of observer higher than the elevation of start point
+    # solution: "slope" or "viewshed"
+    ds = gdal.Open(dem_path)
+    band_data = ds.GetRasterBand(1).ReadAsArray()
+    geoTransform = ds.GetGeoTransform()
+
+    # draw band_data
+    plt.imshow(band_data[:500, :500])
+    plt.show()
+    
+    print(band_data.shape)
+    
+    alg = BaseAlgorithm(geoTransform, band_data)
+
+    viewshed_res = np.zeros(band_data.shape, bool)
+    starti = alg.f2i(*startf)
+
+    # 使用vectorize函数，会将列表形式的多个终点坐标拆成单个数作为参数传入，而不会保留tuple
+    # vectorize 并没有加速
+    
+    """y_crossing = []
+    x_crossing = [] 
+    for x in range(band_data.shape[0]):
+        for y in range(band_data.shape[1]):
+            if abs(starti[0] - x) < abs(starti[1] - y):
+                y_crossing.append([x,y])
+            else:
+                x_crossing.append([x,y])
+
+    ViewshedForAll(alg, startf, x_crossing, Crossing.X_ONLY, start_elev=start_elev, res=viewshed_res)
+    ViewshedForAll(alg, startf, y_crossing, Crossing.Y_ONLY, start_elev=start_elev, res=viewshed_res)"""
+    
+    for y in range(band_data.shape[0]):
+        for x in range(band_data.shape[1]):
+            #print(y,x)
+            if abs(starti[0] - y) < abs(starti[1] - x):
+                ViewshedForPair(alg, startf, (y,x), Crossing.Y_ONLY, start_elev=start_height+alg.dem[starti[0],starti[1]], res=viewshed_res, solution=solution)
+            else:
+                ViewshedForPair(alg, startf, (y,x), Crossing.X_ONLY, start_elev=start_height+alg.dem[starti[0],starti[1]], res=viewshed_res, solution=solution)
+    #print(viewshed_res)
+    return viewshed_res
+    
+def ViewshedForPair(alg, startf: tuple, endi, crossing, start_elev=0, res=None, solution = "height"):
+    # Atomic calculation in R3 Algorithm
+    # startf: start point in float
+    # endi: end point in int
+    # crossing: the axis that the line cross
+    # start_elev: height of observer + elevation 
+    # res: the result map
+    # solution: the solution of judging whether the point can be viewed, "height" or "slope"
+    starti = alg.f2i(*startf)
+    if starti == endi:
+        if res is not None:
+            res[endi[0]][endi[1]] = True
+        return True
+    i, j = alg.crossing_points(startf, endi, crossing)
+    shp = np.dstack((i, j))[0].shape
+    #print(i.shape)
+    #print(np.dstack((i,j)).shape)
+    #print(starti,endi,crossing)
+    #print('共有 {} 个交点'.format(shp[0]))
+    # 求视点和边界点连线上的所有交点的高程插值
+    interpolated_elev = alg.interpolate_elev(i, j)
+    if alg.dem[int(i[0]), int(j[0])] != interpolated_elev[0] or alg.dem[int(i[-1]), int(j[-1])] != interpolated_elev[-1]:
+        print(alg.dem[int(i[0]), int(j[0])],interpolated_elev[0], alg.dem[int(i[-1]), int(j[-1])], interpolated_elev[-1])
+    #assert alg.dem[int(i[0]), int(j[0])] == interpolated_elev[0] and alg.dem[int(i[-1]), int(j[-1])] == interpolated_elev[-1]
+
+    # 求视点和边界点 LOS 上所有交点的高程插值
+    interpolated_los = alg.interpolate_los(
+        i, j, start_elev, alg.dem[endi[0], endi[1]], crossing)
+    assert start_elev == interpolated_los[0]
+    assert alg.dem[endi[0], endi[1]] == interpolated_los[-1]
+    assert interpolated_elev.shape == interpolated_los.shape # 两者插值交点个数是否一致
+    if solution == "height":
+        visible = np.all(interpolated_los >= interpolated_elev)
+    elif solution == "slope":
+        try:
+            angs = (interpolated_elev[1:] - start_elev) / np.sqrt((i[1:] - starti[0])**2 + (j[1:] - starti[1])**2)
+            visible =(angs.max() == angs[-1])
+        except:
+            print(i,j,interpolated_los,interpolated_elev,angs)
+    if res is not None:
+        res[endi[0]][endi[1]] = visible
+    return visible
+
 
 if __name__ == "__main__":
     from osgeo import gdal
@@ -126,40 +215,6 @@ if __name__ == "__main__":
     # 设定相交于横轴还是纵轴
     # 或许 8 个区域应该交叉用 X_ONLY 和 Y_ONLY 确保精度？
     # 即：12点钟方向和 3 点钟方向之间，前半部分用 X_ONLY, 后半部分用 Y_ONLY
-    cross = Crossing.Y_ONLY
-
-    # 首先求视点和边界点连线与各个像元的交点
-    # crossing 表示交点出现在 x 轴上还是 y 轴上
-    # 返回一串点集的索引坐标插值，保证 i j 范围永远在矩阵的索引之内。
-    i, j = alg.crossing_points(start, endi, cross)
-    # 统计交点数目
-    shp = np.dstack((i, j))[0].shape
-    print('共有 {} 个交点'.format(shp[0]))
-
-    # 求视点和边界点连线上的所有交点的高程插值
-    interpolated_elev = alg.interpolate_elev(i, j)
-    assert alg.dem[int(i[0]), int(j[0])] == interpolated_elev[0] and alg.dem[int(
-        i[-1]), int(j[-1])] == interpolated_elev[-1]
-
-    # 求视点和边界点 LOS 上所有交点的高程插值
-    # 应该是三角形的斜边那条线
-    interpolated_los = alg.interpolate_los(
-        i, j, start_elev, alg.dem[endi[0], endi[1]], cross)
-    assert start_elev == interpolated_los[0]
-    assert alg.dem[endi[0], endi[1]] == interpolated_los[-1]
-
-    # 两者插值交点个数是否一致
-    assert interpolated_elev.shape == interpolated_los.shape
-
-    visible = np.all(interpolated_los >= interpolated_elev)
-
-    print("可见性：", visible)
-
-def ViewshedForPair(dem, startf, endf, crossing):
-    alg = BaseAlgorithm(geoTransform, band_data)
-    
-    start, start_elev = (36, 76.3), 5000
-    endi = (100, 499)
     cross = Crossing.Y_ONLY
 
     # 首先求视点和边界点连线与各个像元的交点
